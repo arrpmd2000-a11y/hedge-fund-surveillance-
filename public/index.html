@@ -98,7 +98,7 @@ function getAlerts(liveData){
     if(st!=="Normal")alerts.push({level:st,domain,signal:s.name,value:val,icon:area.icon});
   });});
   alerts.sort((a,b)=>SO.indexOf(b.level)-SO.indexOf(a.level));
-  return alerts.slice(0,5);
+  return alerts;
 }
 
 function Pulse({color,size=5}){return <span style={{position:"relative",display:"inline-block",width:size,height:size}}><span style={{position:"absolute",inset:-2,borderRadius:"50%",background:color,opacity:0.3,animation:"pr 2s ease-out infinite"}}/><span style={{display:"block",width:size,height:size,borderRadius:"50%",background:color}}/></span>;}
@@ -230,15 +230,23 @@ function DomainCard({name,icon,signals,liveData}){
 
 /* ── Alerts ── */
 function TopAlerts({liveData}){
-  const alerts=getAlerts(liveData);if(!alerts.length)return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,textAlign:"center",boxShadow:"var(--sh)"}}><div style={{fontFamily:"var(--f)",fontSize:10,color:"var(--green)",fontWeight:700}}>ALL CLEAR — No priority alerts</div></div>;
+  const [expanded,setExpanded]=React.useState(false);
+  const alerts=getAlerts(liveData);if(!alerts.length)return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,textAlign:"center",boxShadow:"var(--sh)"}}><div style={{fontFamily:"var(--f)",fontSize:10,color:"var(--green)",fontWeight:500}}>ALL CLEAR — No priority alerts</div></div>;
+  const shown=expanded?alerts:alerts.slice(0,5);
   return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh)"}}>
-    <div style={{padding:"10px 16px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>🚨</span><span style={{fontFamily:"var(--fb)",fontSize:13,fontWeight:700}}>Priority Alerts</span><span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginLeft:"auto"}}>{alerts.length}</span></div>
-    {alerts.map((a,i)=>{const sc=SC[a.level];return <div key={i} style={{padding:"9px 16px",borderBottom:"1px solid #f5f6f8",display:"flex",alignItems:"center",gap:8}}>
-      <div style={{width:4,height:26,borderRadius:2,background:sc.dot}}/><span style={{fontSize:13}}>{a.icon}</span>
-      <div style={{flex:1}}><div style={{fontFamily:"var(--fb)",fontSize:12,fontWeight:600}}>{a.signal}</div><div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)"}}>{a.domain}</div></div>
-      <span style={{fontFamily:"var(--f)",fontSize:13,fontWeight:700}}>{a.value}</span>
-      <span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:800,color:sc.c,background:sc.bg,padding:"2px 7px",borderRadius:3,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{a.level}</span>
-    </div>;})}
+    <div style={{padding:"10px 16px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>🚨</span><span style={{fontFamily:"var(--fb)",fontSize:13,fontWeight:700}}>Priority Alerts</span><span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginLeft:"auto"}}>{alerts.length} flagged</span></div>
+    <div style={{maxHeight:expanded?400:"none",overflowY:expanded?"auto":"visible"}}>
+      {shown.map((a,i)=>{const sc=SC[a.level];return <div key={i} style={{padding:"9px 16px",borderBottom:"1px solid #f5f6f8",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:4,height:26,borderRadius:2,background:sc.dot}}/><span style={{fontSize:13}}>{a.icon}</span>
+        <div style={{flex:1}}><div style={{fontFamily:"var(--fb)",fontSize:12,fontWeight:600}}>{a.signal}</div><div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)"}}>{a.domain}</div></div>
+        <span style={{fontFamily:"var(--f)",fontSize:13,fontWeight:500}}>{a.value}</span>
+        <span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:500,color:sc.c,background:sc.bg,padding:"2px 7px",borderRadius:3,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{a.level}</span>
+      </div>;})}
+    </div>
+    {alerts.length>5&&<div onClick={()=>setExpanded(!expanded)} style={{padding:"8px 16px",borderTop:"1px solid #eaecf2",background:"#fafbfc",fontFamily:"var(--f)",fontSize:10,fontWeight:500,color:"var(--accent)",cursor:"pointer",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:4,transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--hover)"} onMouseLeave={e=>e.currentTarget.style.background="#fafbfc"}>
+      <span style={{transform:expanded?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s",display:"inline-block",fontSize:8}}>▼</span>
+      {expanded?"Show less":"View all "+alerts.length+" alerts"}
+    </div>}
   </div>;
 }
 
@@ -341,11 +349,29 @@ function RiskGuide({onClose}){
         <h3 style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700,marginBottom:6}}>Methodology</h3>
         <p style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--text-s)",lineHeight:1.7,marginBottom:14}}>This platform monitors hedge fund risk across four domains: Concentration, Leverage, Liquidity, and Manager/Style. 43+ underlying indicators consolidate into 21 actionable signals. 8 live market feeds refresh every 15 minutes during US market hours. A Crowded Themes widget tracks top consensus HF positions with their specific risk triggers.</p>
 
-        <h3 style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700,marginBottom:6}}>Status Levels</h3>
-        {[{s:"Normal",d:"All underlying indicators within acceptable bounds. No action required."},{s:"Watch",d:"One or more indicators approaching threshold. Monitor actively; prepare contingency."},{s:"Elevated",d:"Thresholds breached. Immediate review required. Escalate to risk committee."},{s:"Critical",d:"Severe risk. Execute pre-defined response plan. Notify senior management."}].map(item=>{const sc=SC[item.s];return <div key={item.s} style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
-          <div style={{fontFamily:"var(--f)",fontSize:8,fontWeight:800,color:sc.c,background:sc.bg,padding:"3px 8px",borderRadius:4,border:`1px solid ${sc.bd}`,minWidth:60,textAlign:"center",textTransform:"uppercase",flexShrink:0,marginTop:1}}>{item.s}</div>
-          <div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text-s)",lineHeight:1.5}}>{item.d}</div>
+        <h3 style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700,marginBottom:6}}>Classification Methodology</h3>
+        <p style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--text-s)",lineHeight:1.7,marginBottom:10}}>Each of the 21 signals is classified into one of four risk levels based on pre-defined thresholds. These thresholds are calibrated against historical data, regulatory guidelines, and industry best practice.</p>
+
+        {[
+          {s:"Normal",d:"All underlying indicators within acceptable bounds. No action required.",detail:"The signal is operating within its expected range based on 1-year historical context. For live feeds, the value is below the first threshold (e.g. VIX <20, MOVE <100, SOFR <4.5%). For non-live signals, the metric is within its mandate or benchmark range."},
+          {s:"Watch",d:"Approaching threshold. Monitor actively; prepare contingency.",detail:"The signal has entered a transitional zone — not yet breached, but trending toward stress. This is the early warning. Examples: VIX 20-25, correlation ρ 0.5-0.7, margin utilisation 50-70%, short interest days-to-cover 3-5. Action: increase monitoring frequency, review hedges, prepare contingency plans."},
+          {s:"Elevated",d:"Threshold breached. Immediate review required. Escalate to risk committee.",detail:"The signal has crossed into a historically unusual range that typically precedes adverse portfolio impact. Examples: VIX 25-30, MOVE 120-140, margin utilisation 70-85%, repo tenor <7 days, redemptions >5% NAV in 30 days. Action: escalate to CIO/risk committee, execute pre-defined risk reduction, verify counterparty exposure."},
+          {s:"Critical",d:"Severe risk. Execute pre-defined response plan. Notify senior management.",detail:"The signal is at an extreme level associated with market dislocations, forced liquidations, or systemic stress events. Examples: VIX >30, MOVE >140, VIX term structure deeply inverted (>1.15), margin utilisation >85%, top 3 LPs >50% AUM. Action: activate crisis playbook, notify board/senior management, execute immediate de-risking, engage legal/compliance."}
+        ].map(item=>{const sc=SC[item.s];return <div key={item.s} style={{marginBottom:12,padding:"10px 14px",background:sc.bg,border:`1px solid ${sc.bd}`,borderRadius:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <div style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:sc.c,background:"#fff",padding:"3px 10px",borderRadius:4,border:`1px solid ${sc.bd}`,textTransform:"uppercase",flexShrink:0}}>{item.s}</div>
+            <div style={{fontFamily:"var(--fb)",fontSize:12,fontWeight:600,color:"var(--text)"}}>{item.d}</div>
+          </div>
+          <div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text-s)",lineHeight:1.6}}>{item.detail}</div>
         </div>;})}
+
+        <h3 style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700,marginBottom:6,marginTop:14}}>How Classification is Determined</h3>
+        <div style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--text-s)",lineHeight:1.7,marginBottom:10}}>
+          <p style={{marginBottom:6}}><strong style={{color:"var(--text)"}}>Live feeds (8 signals):</strong> Classification is automatic based on real-time values against fixed thresholds. For example, when VIX crosses 25, the Equity Vol signal moves from Watch to Elevated instantly on the next refresh cycle (every 15 minutes).</p>
+          <p style={{marginBottom:6}}><strong style={{color:"var(--text)"}}>Non-live signals (13 signals):</strong> These are updated manually based on prime broker reports, 13F filings, fund administrator data, and risk system outputs. Classification uses the same threshold framework but sourced from periodic data (daily, weekly, or monthly depending on the signal).</p>
+          <p style={{marginBottom:6}}><strong style={{color:"var(--text)"}}>Percentile context:</strong> For live feeds, a 1-year percentile rank provides additional context. A VIX of 25 at the 90th percentile (higher than 90% of the past year) is more concerning than a VIX of 25 at the 60th percentile, even though both trigger Elevated status.</p>
+          <p><strong style={{color:"var(--text)"}}>Domain-level rollup:</strong> Each domain's status is the worst (highest severity) among its constituent signals. The overall threat level is the worst across all 4 domains. This ensures no critical signal is hidden by averaging.</p>
+        </div>
 
         <h3 style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700,marginBottom:6,marginTop:14}}>Escalation Logic</h3>
         <p style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--text-s)",lineHeight:1.7,marginBottom:10}}>Each domain's status is the worst among its signals. The overall threat level is the worst across all 21 signals. The Command Center banner auto-generates a plain-English summary. Priority Alerts surface the top non-normal signals sorted by severity.</p>
@@ -487,46 +513,103 @@ function MultiLineChart({lines,height=140}){
   </svg>;
 }
 
-function IndexCard({title,question,ticker,data,extraLines,thresholds,isSofr}){
+const TIMEFRAMES=[{id:"1M",days:22,label:"1M"},{id:"3M",days:66,label:"3M"},{id:"6M",days:132,label:"6M"},{id:"1Y",days:252,label:"1Y"}];
+
+function IndexCard({title,question,ticker,data,extraLines,thresholds,isSofr,def}){
   const [open,setOpen]=React.useState(false);
+  const [tf,setTf]=React.useState("1M");
   if(!data) return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 18px",boxShadow:"var(--sh)"}}><div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text-m)"}}>{title}</div><div style={{fontFamily:"var(--f)",fontSize:16,color:"var(--border-s)",marginTop:4,animation:"blink 1.5s ease infinite"}}>---</div></div>;
   const sc=SC[data.status]||SC.Unknown;const up=(data.changePercent||0)>=0;
   let pctColor="var(--green)";
   if(data.percentile!=null){if(data.percentile>=90)pctColor="var(--red)";else if(data.percentile>=75)pctColor="var(--orange)";else if(data.percentile>=60)pctColor="var(--yellow)";}
-  return <div onClick={()=>setOpen(!open)} style={{background:"var(--card)",border:`1px solid ${data.status!=="Normal"?sc.bd:"var(--border)"}`,borderRadius:10,padding:"14px 18px",boxShadow:"var(--sh)",cursor:"pointer",transition:"all 0.15s",borderLeft:`3px solid ${sc.dot}`,display:"flex",flexDirection:"column",height:"100%"}}>
-    <div style={{fontFamily:"var(--fb)",fontSize:10,fontWeight:600,color:"var(--text-s)",marginBottom:6}}>{question}</div>
-    <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:4}}>
+
+  const tfDays=TIMEFRAMES.find(t=>t.id===tf)?.days||22;
+  const chartData=data.chartHistory?data.chartHistory.slice(-tfDays).map(p=>({d:p.d.slice(5),v:p.v})):null;
+
+  // 52wk range position (0-100%)
+  let rangePos=null;
+  if(data.high52w!=null&&data.low52w!=null&&data.value!=null){
+    const range=data.high52w-data.low52w;
+    rangePos=range>0?Math.round(((data.value-data.low52w)/range)*100):50;
+  }
+
+  return <div onClick={()=>{if(!open)setOpen(true);}} style={{background:"var(--card)",border:`1px solid ${data.status!=="Normal"?sc.bd:"var(--border)"}`,borderRadius:10,padding:"14px 18px",boxShadow:"var(--sh)",cursor:open?"default":"pointer",transition:"all 0.15s",borderLeft:`3px solid ${sc.dot}`,display:"flex",flexDirection:"column",height:"100%"}}>
+    <div style={{fontFamily:"var(--fb)",fontSize:10,fontWeight:600,color:"var(--text-s)",marginBottom:2}}>{question}</div>
+    {def&&<div style={{fontFamily:"var(--fb)",fontSize:9,color:"var(--text-m)",marginBottom:6,lineHeight:1.4}}>{def}</div>}
+    <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:6}}>
       <div><div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}><Pulse color={sc.dot}/><span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:500,color:sc.c}}>{ticker}</span></div>
         <div style={{fontFamily:"var(--f)",fontSize:22,fontWeight:500,color:"var(--text)",lineHeight:1}}>{isSofr?data.value+"%":data.value?.toLocaleString(undefined,{maximumFractionDigits:2})||"---"}</div></div>
       <div style={{marginLeft:"auto",textAlign:"right",display:"flex",alignItems:"center",gap:6}}>
         {data.changePercent!=null&&<span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:up?"var(--red)":"var(--green)"}}>{up?"▲":"▼"}{Math.abs(data.changePercent).toFixed(2)}%</span>}
-        {data.percentile!=null&&<span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:pctColor,background:pctColor+"10",padding:"2px 6px",borderRadius:3}}>{data.percentile}th pctl</span>}
         <span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:500,color:sc.c,background:sc.bg,padding:"2px 6px",borderRadius:3,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{data.status}</span>
       </div>
     </div>
-    {data.zScore!=null&&Math.abs(data.zScore)>=1.5&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"3px 6px",borderRadius:4,background:Math.abs(data.zScore)>=2?"var(--red-bg)":"var(--yellow-bg)",border:`1px solid ${Math.abs(data.zScore)>=2?"var(--red-bd)":"var(--yellow-bd)"}`}}>
+
+    {/* 1Y Percentile bar */}
+    {data.percentile!=null&&<div style={{marginBottom:6}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+        <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>1Y Percentile</span>
+        <span style={{fontFamily:"var(--f)",fontSize:10,fontWeight:500,color:pctColor}}>{data.percentile}th</span>
+      </div>
+      <div style={{height:5,background:"var(--surface)",borderRadius:3,overflow:"hidden",position:"relative"}}>
+        <div style={{height:"100%",width:`${data.percentile}%`,background:pctColor,borderRadius:3}}/>
+        <div style={{position:"absolute",top:-1,left:`${data.percentile}%`,width:2,height:7,background:pctColor,borderRadius:1,transform:"translateX(-1px)"}}/>
+      </div>
+    </div>}
+
+    {/* 52wk range bar */}
+    {data.high52w!=null&&data.low52w!=null&&<div style={{marginBottom:6}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+        <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>52W Low: {data.low52w}</span>
+        <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>52W High: {data.high52w}</span>
+      </div>
+      <div style={{height:5,background:"var(--surface)",borderRadius:3,overflow:"hidden",position:"relative"}}>
+        <div style={{height:"100%",width:`${rangePos}%`,background:"var(--accent)",borderRadius:3,opacity:0.3}}/>
+        <div style={{position:"absolute",top:-1,left:`${rangePos}%`,width:2,height:7,background:"var(--accent)",borderRadius:1,transform:"translateX(-1px)"}}/>
+      </div>
+    </div>}
+
+    {/* Prev close */}
+    {data.previousClose!=null&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+      <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>Prev Close:</span>
+      <span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text)"}}>{isSofr?data.previousClose+"%":data.previousClose?.toLocaleString(undefined,{maximumFractionDigits:2})}</span>
+    </div>}
+
+    {/* Z-score alert */}
+    {data.zScore!=null&&Math.abs(data.zScore)>=1.5&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:5,padding:"3px 6px",borderRadius:4,background:Math.abs(data.zScore)>=2?"var(--red-bg)":"var(--yellow-bg)",border:`1px solid ${Math.abs(data.zScore)>=2?"var(--red-bd)":"var(--yellow-bd)"}`}}>
       <span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:500,color:Math.abs(data.zScore)>=2?"var(--red)":"var(--yellow)"}}>⚠ Today: {data.zScore>0?"+":""}{data.zScore}σ {Math.abs(data.zScore)>=2?"unusual":"notable"}</span>
     </div>}
-    {extraLines?.length>0&&<div style={{display:"flex",gap:12,marginBottom:4}}>
+
+    {/* Extra sub-lines */}
+    {extraLines?.length>0&&<div style={{display:"flex",gap:12,marginBottom:5}}>
       {extraLines.map((e,i)=>{const esc=SC[e.status]||SC.Unknown;return <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
         <div style={{width:3,height:3,borderRadius:"50%",background:esc.dot}}/><span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)"}}>{e.label}:</span><span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500}}>{e.value!=null?typeof e.value==="number"?e.value.toFixed(1):e.value:"--"}</span>
         {e.status!=="Normal"&&e.status!=="Unknown"&&<span style={{fontFamily:"var(--f)",fontSize:6,fontWeight:500,color:esc.c,background:esc.bg,padding:"1px 3px",borderRadius:2,border:`1px solid ${esc.bd}`,textTransform:"uppercase"}}>{e.status}</span>}
       </div>;})}
     </div>}
-    {/* Chart — click to expand */}
-    {open&&data.chart30d&&<div style={{marginTop:8,animation:"fadeUp 0.15s ease-out"}}><ChartSVG data={data.chart30d} thresholds={thresholds} color={sc.dot}/></div>}
-    {open&&!data.chart30d&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)",textAlign:"center",marginTop:8,padding:20,background:"var(--surface)",borderRadius:6}}>Chart data loading on next refresh</div>}
-    {!open&&data.chart30d&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:"auto",paddingTop:6,fontWeight:500}}>▼ Click for 30D chart</div>}
+
+    {/* Chart with timeframe tabs */}
+    {open&&chartData&&<div style={{marginTop:8,animation:"fadeUp 0.15s ease-out"}}>
+      <div style={{display:"flex",gap:2,marginBottom:6}}>{TIMEFRAMES.map(t=><div key={t.id} onClick={e=>{e.stopPropagation();setTf(t.id);}} style={{padding:"3px 10px",fontFamily:"var(--f)",fontSize:8,fontWeight:500,borderRadius:4,cursor:"pointer",color:tf===t.id?"#fff":"var(--text-m)",background:tf===t.id?sc.dot:"var(--surface)",transition:"all 0.1s"}}>{t.label}</div>)}</div>
+      <ChartSVG data={chartData} thresholds={thresholds} color={sc.dot}/>
+    </div>}
+    {open&&!chartData&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)",textAlign:"center",marginTop:8,padding:20,background:"var(--surface)",borderRadius:6}}>Chart data loading on next refresh</div>}
+    {open&&<div onClick={e=>{e.stopPropagation();setOpen(false);}} style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:6,fontWeight:500,cursor:"pointer"}}>▲ Collapse</div>}
+    {!open&&data.chartHistory&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:"auto",paddingTop:6,fontWeight:500}}>▼ Click for chart</div>}
   </div>;
 }
 
-function FlowCard({title,question,spy,qqq,eem}){
+function FlowCard({title,question,spy,qqq,eem,def}){
   const [open,setOpen]=React.useState(false);
+  const [tf,setTf]=React.useState("1M");
   const spySt=spy?.status||"Unknown";const sc=SC[spySt]||SC.Unknown;
-  return <div onClick={()=>setOpen(!open)} style={{background:"var(--card)",border:`1px solid ${spySt!=="Normal"?sc.bd:"var(--border)"}`,borderRadius:10,padding:"14px 18px",boxShadow:"var(--sh)",borderLeft:`3px solid ${sc.dot}`,cursor:"pointer",transition:"all 0.15s",display:"flex",flexDirection:"column",height:"100%"}}>
-    <div style={{fontFamily:"var(--fb)",fontSize:10,fontWeight:600,color:"var(--text-s)",marginBottom:6}}>{question}</div>
+  const tfDays=TIMEFRAMES.find(t=>t.id===tf)?.days||22;
+
+  return <div onClick={()=>{if(!open)setOpen(true);}} style={{background:"var(--card)",border:`1px solid ${spySt!=="Normal"?sc.bd:"var(--border)"}`,borderRadius:10,padding:"14px 18px",boxShadow:"var(--sh)",borderLeft:`3px solid ${sc.dot}`,cursor:open?"default":"pointer",transition:"all 0.15s",display:"flex",flexDirection:"column",height:"100%"}}>
+    <div style={{fontFamily:"var(--fb)",fontSize:10,fontWeight:600,color:"var(--text-s)",marginBottom:2}}>{question}</div>
+    {def&&<div style={{fontFamily:"var(--fb)",fontSize:9,color:"var(--text-m)",marginBottom:6,lineHeight:1.4}}>{def}</div>}
     <div style={{display:"flex",gap:16,marginBottom:4}}>
-      {[{l:"SPY",d:spy,c:"#3654b3"},{l:"QQQ",d:qqq,c:"#7c3aed"},{l:"EEM",d:eem,c:"#0891b2"}].map(({l,d,c})=>{if(!d)return null;const s=SC[d.status]||SC.Unknown;const v=d.changePercent;
+      {[{l:"SPY",d:spy,c:"#3654b3"},{l:"QQQ",d:qqq,c:"#7c3aed"},{l:"EEM",d:eem,c:"#0891b2"}].map(({l,d,c})=>{if(!d)return null;const v=d.changePercent;
         return <div key={l} style={{display:"flex",alignItems:"center",gap:4}}>
           <Pulse color={c}/><span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:500,color:c}}>{l}</span>
           <span style={{fontFamily:"var(--f)",fontSize:14,fontWeight:500,color:"var(--text)"}}>{v!=null?(v>=0?"+":"")+v.toFixed(2)+"%":"--"}</span>
@@ -534,57 +617,110 @@ function FlowCard({title,question,spy,qqq,eem}){
           {d.cumulative5d!=null&&d.cumulative5d<=-3&&<span style={{fontFamily:"var(--f)",fontSize:6,fontWeight:500,color:"var(--red)",background:"var(--red-bg)",padding:"1px 3px",borderRadius:2,border:"1px solid var(--red-bd)"}}>SUSTAINED</span>}
         </div>;})}
     </div>
-    {/* Chart — click to expand */}
-    {open&&spy?.chart30d&&<div style={{marginTop:8,animation:"fadeUp 0.15s ease-out"}}>
+    {/* Chart with timeframe tabs */}
+    {open&&spy?.chartHistory&&<div style={{marginTop:8,animation:"fadeUp 0.15s ease-out"}}>
+      <div style={{display:"flex",gap:2,marginBottom:6}}>{TIMEFRAMES.map(t=><div key={t.id} onClick={e=>{e.stopPropagation();setTf(t.id);}} style={{padding:"3px 10px",fontFamily:"var(--f)",fontSize:8,fontWeight:500,borderRadius:4,cursor:"pointer",color:tf===t.id?"#fff":"var(--text-m)",background:tf===t.id?sc.dot:"var(--surface)",transition:"all 0.1s"}}>{t.label}</div>)}</div>
       <MultiLineChart lines={[
-        {label:"SPY",data:spy.chart30d,color:"#3654b3"},
-        {label:"QQQ",data:qqq?.chart30d,color:"#7c3aed"},
-        {label:"EEM",data:eem?.chart30d,color:"#0891b2"},
+        {label:"SPY",data:spy.chartHistory?.slice(-tfDays).map(p=>({d:p.d.slice(5),v:p.v})),color:"#3654b3"},
+        {label:"QQQ",data:qqq?.chartHistory?.slice(-tfDays).map(p=>({d:p.d.slice(5),v:p.v})),color:"#7c3aed"},
+        {label:"EEM",data:eem?.chartHistory?.slice(-tfDays).map(p=>({d:p.d.slice(5),v:p.v})),color:"#0891b2"},
       ]} />
-      <div style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)",textAlign:"center",marginTop:2}}>30D cumulative returns — broad vs concentrated de-risking</div>
+      <div style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)",textAlign:"center",marginTop:2}}>Cumulative returns — broad vs concentrated de-risking</div>
     </div>}
-    {!open&&spy?.chart30d&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:"auto",paddingTop:6,fontWeight:500}}>▼ Click for 30D flow chart</div>}
+    {open&&<div onClick={e=>{e.stopPropagation();setOpen(false);}} style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:6,fontWeight:500,cursor:"pointer"}}>▲ Collapse</div>}
+    {!open&&spy?.chartHistory&&<div style={{fontFamily:"var(--f)",fontSize:8,color:"var(--accent)",textAlign:"center",marginTop:"auto",paddingTop:6,fontWeight:500}}>▼ Click for flow chart</div>}
   </div>;
 }
 
 /* ═══ DOMAIN FOCUS PANEL ═══ */
+/* ── Helper: get previous month-end value from chartHistory ── */
+function getPrevMonthStatus(sig, liveData) {
+  if (!sig.live || !sig.ticker || !liveData?.indicators) return null;
+  const ind = liveData.indicators[sig.ticker];
+  if (!ind?.chartHistory || ind.chartHistory.length < 25) return null;
+
+  // Find last trading day of previous month
+  const now = new Date();
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // last day of prev month
+  const prevMonthStr = prevMonthEnd.toISOString().slice(0, 7); // e.g. "2026-03"
+
+  // Find the last data point in the previous month
+  let prevVal = null;
+  for (let i = ind.chartHistory.length - 1; i >= 0; i--) {
+    if (ind.chartHistory[i].d.slice(0, 7) <= prevMonthStr) {
+      prevVal = ind.chartHistory[i].v;
+      break;
+    }
+  }
+  if (prevVal == null) return null;
+
+  // Apply same threshold logic based on ticker
+  const t = sig.ticker;
+  if (t === "VIX") { if (prevVal >= 30) return "Critical"; if (prevVal >= 25) return "Elevated"; if (prevVal >= 20) return "Watch"; return "Normal"; }
+  if (t === "VVIX") { if (prevVal >= 120) return "Critical"; if (prevVal >= 100) return "Elevated"; if (prevVal >= 90) return "Watch"; return "Normal"; }
+  if (t === "MOVE") { if (prevVal >= 140) return "Critical"; if (prevVal >= 120) return "Elevated"; if (prevVal >= 100) return "Watch"; return "Normal"; }
+  if (t === "SOFR") { if (prevVal >= 5.5) return "Critical"; if (prevVal >= 5) return "Elevated"; if (prevVal >= 4.5) return "Watch"; return "Normal"; }
+  if (t === "SPY" || t === "QQQ" || t === "EEM") return null; // ETF daily change not comparable month-over-month
+  return null;
+}
+
 function DomainFocus({name,icon,area,liveData,news,onClose}){
   const [expId,setExpId]=React.useState(null);
   const relatedNews=(news||[]).filter(n=>area.relatedTags?.includes(n.riskTag));
   const w=worst(area.signals.map(s=>getStatus(s,liveData)));const sc=SC[w]||SC.Unknown;
+  const soIdx={"Normal":0,"Watch":1,"Elevated":2,"Critical":3};
+
+  // Compute previous month-end date label (e.g. "31 Mar 2026")
+  const prevMonthEnd=new Date(new Date().getFullYear(),new Date().getMonth(),0);
+  const prevMonthLabel=prevMonthEnd.toLocaleDateString([],{day:"2-digit",month:"short",year:"numeric"});
+
   return <div style={{background:"var(--card)",border:`2px solid ${sc.bd}`,borderRadius:14,overflow:"hidden",boxShadow:`0 4px 20px ${sc.ring}`,animation:"fadeUp 0.2s ease-out",marginTop:12,marginBottom:12}}>
     <div style={{padding:"10px 16px",background:sc.bg,borderBottom:`1px solid ${sc.bd}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{icon}</span><span style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700}}>{name} — Deep Dive</span><span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:800,color:sc.c,background:"#fff",padding:"2px 8px",borderRadius:4,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{w}</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{icon}</span><span style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700}}>{name} — Deep Dive</span><span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:sc.c,background:"#fff",padding:"2px 8px",borderRadius:4,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{w}</span></div>
       <span onClick={onClose} style={{cursor:"pointer",color:"var(--text-m)",fontSize:16,width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>×</span>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",minHeight:180}}>
       <div style={{borderRight:"1px solid #eaecf2"}}>
-        <div style={{padding:"8px 14px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",fontFamily:"var(--f)",fontSize:9,fontWeight:700,color:"var(--text-m)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Signals</div>
+        <div style={{padding:"8px 14px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text-m)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Current Status</span>
+          <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>vs {prevMonthLabel}</span>
+        </div>
         {area.signals.map(s=>{const st=getStatus(s,liveData);const ssc=SC[st]||SC.Unknown;const val=getValue(s,liveData)||s.value;const exp=expId===s.id;
+          const prevSt=getPrevMonthStatus(s,liveData);
+          const changed=prevSt&&prevSt!==st;
+          const worsened=prevSt&&(soIdx[st]||0)>(soIdx[prevSt]||0);
+          const improved=prevSt&&(soIdx[st]||0)<(soIdx[prevSt]||0);
+
           return <div key={s.id} style={{borderBottom:"1px solid #f5f6f8"}}>
             <div onClick={()=>setExpId(exp?null:s.id)} style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",background:exp?"#f8f9fb":"transparent",transition:"background 0.1s"}} onMouseEnter={e=>{if(!exp)e.currentTarget.style.background="#fafbfc"}} onMouseLeave={e=>{if(!exp)e.currentTarget.style.background="transparent"}}>
               <div style={{width:3,height:22,borderRadius:2,background:ssc.dot}}/>
-              <div style={{flex:1}}><div style={{fontFamily:"var(--fb)",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>{s.name}{s.live&&<span style={{fontFamily:"var(--f)",fontSize:6,color:"var(--green)",background:"var(--green-bg)",padding:"1px 3px",borderRadius:2,fontWeight:700,border:"1px solid var(--green-bd)"}}>LIVE</span>}</div></div>
-              <span style={{fontFamily:"var(--f)",fontSize:12,fontWeight:700}}>{val}</span>
-              <span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:800,color:ssc.c,background:ssc.bg,padding:"2px 6px",borderRadius:3,border:`1px solid ${ssc.bd}`,textTransform:"uppercase"}}>{st}</span>
+              <div style={{flex:1}}><div style={{fontFamily:"var(--fb)",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>{s.name}{s.live&&<span style={{fontFamily:"var(--f)",fontSize:6,color:"var(--green)",background:"var(--green-bg)",padding:"1px 3px",borderRadius:2,fontWeight:500,border:"1px solid var(--green-bd)"}}>LIVE</span>}</div></div>
+              <span style={{fontFamily:"var(--f)",fontSize:12,fontWeight:500}}>{val}</span>
+              <span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:500,color:ssc.c,background:ssc.bg,padding:"2px 6px",borderRadius:3,border:`1px solid ${ssc.bd}`,textTransform:"uppercase"}}>{st}</span>
+              <div style={{minWidth:68,textAlign:"right"}}>
+                {prevSt&&worsened&&<span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:500,color:"var(--red)"}}>Worsened</span>}
+                {prevSt&&improved&&<span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:500,color:"var(--green)"}}>Improved</span>}
+                {prevSt&&!changed&&<span style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)"}}>Unchanged</span>}
+                {!prevSt&&<span style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)"}}>N/A</span>}
+              </div>
               <span style={{color:"var(--border-s)",fontSize:9,transform:exp?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>▶</span>
             </div>
             {exp&&<div style={{padding:"6px 14px 10px 24px",borderTop:"1px solid #f0f1f5",animation:"fadeUp 0.15s ease-out"}}>
               <div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text-s)",lineHeight:1.6,marginBottom:5}}>{s.def}</div>
               <div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginBottom:3}}><b>Thresholds:</b> {s.trigger}</div>
-              <div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text)"}}><span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:700,color:"var(--text-m)"}}>Action: </span>{s.action}</div>
+              <div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text)"}}><span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text-m)"}}>Action: </span>{s.action}</div>
             </div>}
           </div>;
         })}
       </div>
       <div>
-        <div style={{padding:"8px 14px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",fontFamily:"var(--f)",fontSize:9,fontWeight:700,color:"var(--text-m)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Related Headlines ({relatedNews.length})</div>
+        <div style={{padding:"8px 14px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text-m)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Related Headlines ({relatedNews.length})</div>
         {relatedNews.length===0&&<div style={{padding:16,fontFamily:"var(--f)",fontSize:10,color:"var(--text-m)",textAlign:"center"}}>No related headlines</div>}
         <div style={{maxHeight:300,overflowY:"auto"}}>{relatedNews.map((a,i)=>{const tc=TAG_C[a.riskTag]||"var(--text-m)";return <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px 14px",borderBottom:"1px solid #f5f6f8",textDecoration:"none",color:"inherit",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--surface)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
           <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
             <div style={{width:4,height:4,borderRadius:"50%",background:SENT[a.sentiment]||SENT.neutral,marginTop:5,flexShrink:0}}/>
             <div><div style={{fontFamily:"var(--fb)",fontSize:11,color:"var(--text)",lineHeight:1.4,fontWeight:500}}>{a.fund&&<span style={{fontWeight:700,color:"var(--accent)"}}>{a.fund} — </span>}{a.title}</div>
-              <div style={{display:"flex",gap:4,marginTop:2}}><span style={{fontFamily:"var(--f)",fontSize:6,fontWeight:700,color:tc,background:tc+"10",padding:"1px 3px",borderRadius:2,border:`1px solid ${tc}30`}}>{a.riskTag}</span><span style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)"}}>{a.publisher} · {timeAgo(a.publishedAt)}</span></div>
+              <div style={{display:"flex",gap:4,marginTop:2}}><span style={{fontFamily:"var(--f)",fontSize:6,fontWeight:500,color:tc,background:tc+"10",padding:"1px 3px",borderRadius:2,border:`1px solid ${tc}30`}}>{a.riskTag}</span><span style={{fontFamily:"var(--f)",fontSize:7,color:"var(--text-m)"}}>{a.publisher} · {timeAgo(a.publishedAt)}</span></div>
             </div>
           </div>
         </a>;})}</div>
@@ -627,7 +763,7 @@ function App(){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
       <div><div style={{fontFamily:"var(--f)",fontSize:7,fontWeight:500,letterSpacing:"0.14em",color:"var(--accent)",textTransform:"uppercase"}}>SURVEILLANCE · v3.0</div><div style={{fontFamily:"var(--fb)",fontSize:18,fontWeight:700,letterSpacing:"-0.02em"}}>Hedge Funds Market Surveillance</div></div>
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
-        <span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)"}}>{lastRefresh?new Date(lastRefresh).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"..."}</span>
+        <span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)"}}>{lastRefresh?new Date(lastRefresh).toLocaleDateString([],{day:"2-digit",month:"short",year:"numeric"})+" "+new Date(lastRefresh).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"..."}</span>
         <button onClick={()=>fetchLive(true)} disabled={loading} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:5,padding:"4px 10px",fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text-s)",cursor:loading?"wait":"pointer",display:"flex",alignItems:"center",gap:3}}><span style={{display:"inline-block",animation:loading?"spin 1s linear infinite":"none"}}>↻</span>Refresh</button>
       </div>
     </div>
@@ -666,13 +802,20 @@ function App(){
 
     {/* 3. INDEX CARDS with custom charts (2x2, equal size) */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridAutoRows:"1fr",gap:12,marginBottom:14,marginTop:selDomain?14:0}}>
-      <IndexCard title="Equity Volatility" question="Is equity vol elevated?" ticker="VIX" data={ind.VIX} extraLines={[{label:"VVIX",value:vvixVal,status:vvixSt},{label:"Term (VIX/VIX3M)",value:vtVal,status:vtSt}]}
+      <IndexCard title="Equity Volatility" question="Is equity vol elevated?" ticker="VIX" data={ind.VIX}
+        def="CBOE Volatility Index — 30-day implied volatility of S&P 500 options."
+        extraLines={[{label:"VVIX",value:vvixVal,status:vvixSt},{label:"Term (VIX/VIX3M)",value:vtVal,status:vtSt}]}
         thresholds={[{y:20,label:"Watch",c:"var(--yellow)"},{y:25,label:"Elevated",c:"var(--orange)"},{y:30,label:"Critical",c:"var(--red)"}]} />
-      <IndexCard title="Rates Volatility" question="Are rates markets stressed?" ticker="MOVE" data={ind.MOVE} extraLines={[]}
+      <IndexCard title="Rates Volatility" question="Are rates markets stressed?" ticker="MOVE" data={ind.MOVE}
+        def="ICE BofAML MOVE Index — implied volatility of US Treasury options."
+        extraLines={[]}
         thresholds={[{y:100,label:"Watch",c:"var(--yellow)"},{y:120,label:"Elevated",c:"var(--orange)"},{y:140,label:"Critical",c:"var(--red)"}]} />
-      <IndexCard title="Funding Cost" question="Is funding tight?" ticker="SOFR" data={ind.SOFR} isSofr={true} extraLines={[]}
+      <IndexCard title="Funding Cost" question="Is funding tight?" ticker="SOFR" data={ind.SOFR} isSofr={true}
+        def="Secured Overnight Financing Rate."
+        extraLines={[]}
         thresholds={[{y:4.5,label:"Watch",c:"var(--yellow)"},{y:5.0,label:"Elevated",c:"var(--orange)"}]} />
-      <FlowCard title="Market Flows" question="Are flows de-risking?" spy={ind.SPY} qqq={ind.QQQ} eem={ind.EEM} />
+      <FlowCard title="Market Flows" question="Are flows de-risking?" spy={ind.SPY} qqq={ind.QQQ} eem={ind.EEM}
+        def="Daily ETF price changes as institutional/retail flow proxy. SPY (S&P 500), QQQ (Nasdaq 100), EEM (Emerging Markets)." />
     </div>
 
     {/* 4. Alerts + Themes + News */}
