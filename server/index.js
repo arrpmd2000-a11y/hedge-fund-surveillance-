@@ -195,17 +195,43 @@ async function fetchFinnhubQuote(symbol, retries = 2) {
       const q = await qResp.json();
       if (!q.c) throw new Error("No quote data");
 
-      await sleep(500);
+      await sleep(600);
 
-      // 1Y candle for percentile + chart
-      const now = Math.floor(Date.now() / 1000);
-      const yearAgo = now - 365 * 86400;
-      const cUrl = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${yearAgo}&to=${now}&token=${FINNHUB_KEY}`;
-      const cResp = await fetch(cUrl);
-      const candle = await cResp.json();
+      // 1Y candle for percentile + chart — non-fatal if it fails
+      let closes = [], candleTimestamps = [];
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const yearAgo = now - 365 * 86400;
+        const cUrl = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${yearAgo}&to=${now}&token=${FINNHUB_KEY}`;
+        const cResp = await fetch(cUrl);
+        if (cResp.ok) {
+          const candle = await cResp.json();
+          if (candle?.s === "ok" && candle?.c) {
+            closes = candle.c.filter(c => c != null);
+            candleTimestamps = candle.t || [];
+          }
+        }
+      } catch (candleErr) {
+        console.warn(`  Finnhub ${symbol} candle failed: ${candleErr.message}`);
+      }
 
-      const closes = candle?.c?.filter(c => c != null) || [];
-      const candleTimestamps = candle?.t || [];
+      // If Finnhub candle empty, try Yahoo for chart data
+      if (closes.length < 20) {
+        try {
+          console.log(`  Finnhub ${symbol}: candle empty, fetching chart from Yahoo...`);
+          await sleep(1500);
+          const yahooData = await fetchYahooV8(symbol);
+          if (yahooData.chartHistory && yahooData.chartHistory.length > 20) {
+            return {
+              price: q.c, change: q.d, changePercent: q.dp, previousClose: q.pc,
+              timestamp: new Date().toISOString(),
+              percentile: yahooData.percentile, high52w: yahooData.high52w, low52w: yahooData.low52w,
+              zScore: yahooData.zScore, cumulative5d: yahooData.cumulative5d,
+              chartHistory: yahooData.chartHistory,
+            };
+          }
+        } catch(e) { console.warn(`  Yahoo fallback for ${symbol} chart also failed`); }
+      }
 
       // Percentile
       let percentile = null, high52w = null, low52w = null;
