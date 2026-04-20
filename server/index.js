@@ -126,13 +126,11 @@ async function fetchYahooV8(ticker, retries = 3) {
         }
       }
 
-      // Last 30 trading days for mini chart
-      let chart30d = null;
-      if (closes.length > 30 && timestamps.length > 30) {
-        const last30 = closes.slice(-30);
-        const last30t = timestamps.slice(-30);
-        chart30d = last30.map((c, i) => ({
-          d: new Date(last30t[i] * 1000).toISOString().slice(5, 10),
+      // Full daily history for chart (frontend will slice by timeframe)
+      let chartHistory = null;
+      if (closes.length > 10 && timestamps.length > 10) {
+        chartHistory = closes.map((c, i) => ({
+          d: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
           v: parseFloat(c.toFixed(2)),
         }));
       }
@@ -150,7 +148,7 @@ async function fetchYahooV8(ticker, retries = 3) {
         low52w: low52w ? parseFloat(low52w.toFixed(2)) : null,
         zScore,
         cumulative5d,
-        chart30d,
+        chartHistory,
       };
     } catch (err) {
       console.warn(`  Yahoo ${ticker} attempt ${attempt}/${retries}: ${err.message}`);
@@ -240,11 +238,11 @@ async function fetchFinnhubQuote(symbol, retries = 2) {
         }
       }
 
-      // Chart 30d
-      let chart30d = null;
-      if (closes.length > 30 && candleTimestamps.length > 30) {
-        chart30d = closes.slice(-30).map((c, i) => ({
-          d: new Date(candleTimestamps.slice(-30)[i] * 1000).toISOString().slice(5, 10),
+      // Full chart history
+      let chartHistory = null;
+      if (closes.length > 10 && candleTimestamps.length > 10) {
+        chartHistory = closes.map((c, i) => ({
+          d: new Date(candleTimestamps[i] * 1000).toISOString().slice(0, 10),
           v: parseFloat(c.toFixed(2)),
         }));
       }
@@ -255,7 +253,7 @@ async function fetchFinnhubQuote(symbol, retries = 2) {
         changePercent: q.dp,
         previousClose: q.pc,
         timestamp: new Date().toISOString(),
-        percentile, high52w, low52w, zScore, cumulative5d, chart30d,
+        percentile, high52w, low52w, zScore, cumulative5d, chartHistory,
       };
     } catch (err) {
       console.warn(`  Finnhub ${symbol} attempt ${attempt}/${retries}: ${err.message}`);
@@ -305,8 +303,8 @@ async function buildLiveFeed() {
   let sofrChart = null;
   try {
     const sofrYahoo = await fetchYahooV8("^SOFR");
-    if (sofrYahoo.chart30d) sofrChart = sofrYahoo;
-    console.log(`  SOFR chart: ${sofrYahoo.chart30d ? sofrYahoo.chart30d.length + " days" : "failed"} (Yahoo)`);
+    if (sofrYahoo.chartHistory) sofrChart = sofrYahoo;
+    console.log(`  SOFR chart: ${sofrYahoo.chartHistory ? sofrYahoo.chartHistory.length + " days" : "failed"} (Yahoo)`);
   } catch(e) { console.warn("  SOFR chart fetch failed"); }
   await sleep(1500);
 
@@ -343,7 +341,7 @@ async function buildLiveFeed() {
 
   // Helper to add context fields
   function ctx(d) {
-    return { percentile: d.percentile, high52w: d.high52w, low52w: d.low52w, zScore: d.zScore, cumulative5d: d.cumulative5d, chart30d: d.chart30d };
+    return { percentile: d.percentile, high52w: d.high52w, low52w: d.low52w, zScore: d.zScore, cumulative5d: d.cumulative5d, chartHistory: d.chartHistory };
   }
 
   const feed = {
@@ -383,7 +381,7 @@ async function buildLiveFeed() {
         value: sofr.value, date: sofr.date,
         status: sofrStatus(sofr.value), source: sofr.source ?? "FRED",
         ticker: "SOFR", label: "GC Repo Rate (SOFR)", error: sofr.error || null,
-        chart30d: sofrChart?.chart30d || null,
+        chartHistory: sofrChart?.chartHistory || null,
         percentile: sofrChart?.percentile || null,
         high52w: sofrChart?.high52w || null,
         low52w: sofrChart?.low52w || null,
@@ -741,10 +739,23 @@ async function fetchHedgeFundNews() {
   const tagged = raw.map(tagArticle);
   const ranked = rankArticles(tagged);
 
-  // Take top 25
-  cachedNews = ranked.slice(0, 25);
+  // Filter to last 14 days only
+  const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const recent = ranked.filter(a => {
+    if (!a.publishedAt) return true; // keep articles without dates (rare)
+    return new Date(a.publishedAt).getTime() >= fourteenDaysAgo;
+  });
+
+  // Sort by date — newest first
+  recent.sort((a, b) => {
+    const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  cachedNews = recent.slice(0, 50);
   lastNewsFetch = Date.now();
-  console.log(`  News ready: ${cachedNews.length} curated articles\n`);
+  console.log(`  News ready: ${cachedNews.length} articles (last 14 days)\n`);
   return cachedNews;
 }
 
