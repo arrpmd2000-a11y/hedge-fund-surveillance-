@@ -903,7 +903,19 @@ ${combined}` }],
     });
 
     const data = await resp.json();
+
+    // Check for API errors
+    if (!resp.ok || data.error) {
+      const errMsg = data.error?.message || `Anthropic API HTTP ${resp.status}`;
+      console.error("Anthropic API error:", errMsg);
+      return res.status(resp.status || 500).json({ error: errMsg });
+    }
+
     const raw = data.content?.map(c => c.text).join("") || "";
+    if (!raw) {
+      return res.status(500).json({ error: "Empty response from Claude API. Check your ANTHROPIC_API_KEY." });
+    }
+
     const cleaned = raw.replace(/```json|```/g, "").trim();
 
     let parsed;
@@ -913,7 +925,9 @@ ${combined}` }],
       const oq = (fixed.match(/\[/g) || []).length, cq = (fixed.match(/\]/g) || []).length;
       for (let i = 0; i < oq - cq; i++) fixed += "]";
       for (let i = 0; i < ob - cb; i++) fixed += "}";
-      parsed = JSON.parse(fixed);
+      try { parsed = JSON.parse(fixed); } catch(e2) {
+        return res.status(500).json({ error: "Failed to parse Claude response. Raw output: " + cleaned.slice(0, 200) });
+      }
     }
 
     res.json(parsed);
