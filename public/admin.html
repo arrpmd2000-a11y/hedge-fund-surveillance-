@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Admin — PB Report Reader</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f4f5f7;font-family:'Source Sans 3',sans-serif;color:#1b1f2e;min-height:100vh}
+textarea{font-family:'DM Mono',monospace;font-size:10px;padding:10px;border:1px solid #dcdfe7;border-radius:6px;outline:none;resize:vertical;width:100%;line-height:1.5}
+textarea:focus{border-color:#3654b3}
+input{font-family:'Source Sans 3',sans-serif;font-size:12px;padding:6px 10px;border:1px solid #dcdfe7;border-radius:6px;outline:none}
+input:focus{border-color:#3654b3}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#dcdfe7;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const f="'DM Mono',monospace",fb="'Source Sans 3',sans-serif";
+const SC={Normal:{c:"#0e8a4f",bg:"#eef8f2",bd:"#aedfc4"},Watch:{c:"#b47300",bg:"#fdf6e5",bd:"#efd07e"},Elevated:{c:"#b34800",bg:"#fdeee5",bd:"#efab7e"},Critical:{c:"#b52525",bg:"#fdeeee",bd:"#ee9898"}};
+
+function App(){
+  const [reports,setReports]=React.useState([{id:1,broker:"",text:""}]);
+  const [loading,setLoading]=React.useState(false);
+  const [result,setResult]=React.useState(null);
+  const [error,setError]=React.useState(null);
+  const [saved,setSaved]=React.useState(false);
+  const [history,setHistory]=React.useState(null);
+  const [view,setView]=React.useState("upload");
+
+  function addReport(){setReports(p=>[...p,{id:Date.now(),broker:"",text:""}]);}
+  function removeReport(id){setReports(p=>p.filter(r=>r.id!==id));}
+  function updateReport(id,field,val){setReports(p=>p.map(r=>r.id===id?{...r,[field]:val}:r));}
+
+  async function analyzeReports(){
+    const filled=reports.filter(r=>r.text.trim());
+    if(!filled.length){setError("Add at least one report");return;}
+    setLoading(true);setError(null);setResult(null);setSaved(false);
+    try{
+      const resp=await fetch("/api/pb-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reports:filled})});
+      if(!resp.ok){const e=await resp.json();throw new Error(e.error||"API error");}
+      setResult(await resp.json());
+    }catch(err){setError(err.message);}
+    setLoading(false);
+  }
+
+  async function saveToHistory(){
+    if(!result)return;
+    try{
+      const resp=await fetch("/api/signals/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reportDate:result.reportDate,brokersFound:result.brokersFound,signals:result.signals})});
+      if(resp.ok){setSaved(true);setTimeout(()=>setSaved(false),3000);}
+    }catch(err){setError(err.message);}
+  }
+
+  async function loadHistory(){
+    try{const resp=await fetch("/api/signals/history");const data=await resp.json();setHistory(data);}catch{}
+  }
+
+  React.useEffect(()=>{if(view==="history")loadHistory();},[view]);
+
+  function formatDate(d){try{return new Date(d).toLocaleDateString([],{day:"2-digit",month:"short",year:"numeric"});}catch{return d;}}
+
+  return <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 20px"}}>
+    {/* Header */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <div>
+        <div style={{fontFamily:f,fontSize:8,fontWeight:500,letterSpacing:"0.12em",color:"#3654b3",textTransform:"uppercase",marginBottom:4}}>ADMIN · SIGNAL MANAGEMENT</div>
+        <div style={{fontFamily:fb,fontSize:22,fontWeight:700}}>PB Report Reader</div>
+      </div>
+      <a href="/" style={{fontFamily:f,fontSize:10,color:"#3654b3",textDecoration:"none",padding:"6px 14px",background:"#edf1ff",borderRadius:6}}>← Back to Dashboard</a>
+    </div>
+
+    {/* Tabs */}
+    <div style={{display:"flex",gap:2,marginBottom:16}}>
+      {[{id:"upload",l:"Upload Reports"},{id:"history",l:"Signal History"}].map(t=>
+        <div key={t.id} onClick={()=>setView(t.id)} style={{padding:"8px 20px",fontFamily:f,fontSize:10,fontWeight:500,borderRadius:6,cursor:"pointer",color:view===t.id?"#fff":"#878da4",background:view===t.id?"#3654b3":"#eef0f4"}}>{t.l}</div>
+      )}
+    </div>
+
+    {view==="upload"&&<div>
+      {/* Action bar */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <button onClick={addReport} style={{padding:"8px 14px",background:"#fff",border:"1px solid #dcdfe7",borderRadius:6,fontFamily:fb,fontSize:12,cursor:"pointer",color:"#4a5068"}}>+ Add Report</button>
+        <button onClick={analyzeReports} disabled={loading} style={{padding:"8px 16px",background:loading?"#878da4":"#3654b3",border:"none",borderRadius:6,fontFamily:fb,fontSize:12,fontWeight:600,cursor:loading?"wait":"pointer",color:"#fff",marginLeft:"auto"}}>
+          {loading?"Analyzing...":"Extract & Aggregate Signals"}
+        </button>
+      </div>
+
+      {/* Report inputs */}
+      <div style={{display:"grid",gridTemplateColumns:reports.length>2?"1fr 1fr 1fr":reports.length>1?"1fr 1fr":"1fr",gap:12,marginBottom:16}}>
+        {reports.map((r,i)=><div key={r.id} style={{background:"#fff",border:"1px solid #dcdfe7",borderRadius:10,padding:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <div style={{width:24,height:24,borderRadius:6,background:"#3654b3",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:f,fontSize:10,flexShrink:0}}>{i+1}</div>
+            <input value={r.broker} onChange={e=>updateReport(r.id,"broker",e.target.value)} placeholder="Broker name" style={{flex:1}}/>
+            {reports.length>1&&<span onClick={()=>removeReport(r.id)} style={{cursor:"pointer",color:"#878da4",fontSize:14}}>×</span>}
+          </div>
+          <textarea rows={10} value={r.text} onChange={e=>updateReport(r.id,"text",e.target.value)} placeholder="Paste PB report text here..."/>
+        </div>)}
+      </div>
+
+      {/* Loading */}
+      {loading&&<div style={{background:"#fff",border:"1px solid #dcdfe7",borderRadius:12,padding:30,textAlign:"center",marginBottom:16}}>
+        <div style={{fontFamily:fb,fontSize:14,color:"#3654b3",fontWeight:600}}>Analyzing with Claude...</div>
+      </div>}
+
+      {error&&<div style={{background:"#fdeeee",border:"1px solid #ee9898",borderRadius:10,padding:14,marginBottom:16,fontFamily:fb,fontSize:13,color:"#b52525"}}>{error}</div>}
+      {saved&&<div style={{background:"#eef8f2",border:"1px solid #aedfc4",borderRadius:10,padding:14,marginBottom:16,fontFamily:fb,fontSize:13,color:"#0e8a4f",fontWeight:600}}>✓ Signals saved to dashboard</div>}
+
+      {/* Results */}
+      {result&&<div>
+        {/* Meta */}
+        <div style={{background:"#fff",border:"1px solid #dcdfe7",borderRadius:12,padding:16,marginBottom:14,display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+          <div><div style={{fontFamily:f,fontSize:8,color:"#878da4",textTransform:"uppercase"}}>Date</div><div style={{fontFamily:f,fontSize:13,fontWeight:500}}>{result.reportDate}</div></div>
+          <div><div style={{fontFamily:f,fontSize:8,color:"#878da4",textTransform:"uppercase"}}>Brokers</div><div style={{display:"flex",gap:4}}>{result.brokersFound?.map((b,i)=><span key={i} style={{fontFamily:fb,fontSize:11,background:"#eef0f4",padding:"3px 8px",borderRadius:4}}>{b}</span>)}</div></div>
+          <div><div style={{fontFamily:f,fontSize:8,color:"#878da4",textTransform:"uppercase"}}>Signals</div><div style={{fontFamily:f,fontSize:13,fontWeight:500}}>{result.signals?.length}</div></div>
+          <button onClick={saveToHistory} style={{padding:"8px 16px",background:"#0e8a4f",border:"none",borderRadius:6,fontFamily:fb,fontSize:12,fontWeight:600,cursor:"pointer",color:"#fff",marginLeft:"auto"}}>Save to Dashboard →</button>
+        </div>
+
+        {/* Alerts */}
+        {result.alerts?.length>0&&<div style={{background:"#fdeeee",border:"1px solid #ee9898",borderRadius:10,padding:14,marginBottom:14}}>
+          <div style={{fontFamily:fb,fontSize:12,fontWeight:700,color:"#b52525",marginBottom:6}}>Risk Alerts</div>
+          {result.alerts.map((a,i)=><div key={i} style={{fontFamily:fb,fontSize:11,color:"#4a5068",marginBottom:3,paddingLeft:10,borderLeft:"3px solid #ee9898"}}>• {a}</div>)}
+        </div>}
+
+        {/* Signals table */}
+        <div style={{background:"#fff",border:"1px solid #dcdfe7",borderRadius:12,overflow:"hidden"}}>
+          <div style={{display:"flex",padding:"8px 16px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",fontFamily:f,fontSize:8,fontWeight:500,color:"#878da4",textTransform:"uppercase"}}>
+            <span style={{flex:"0 0 110px"}}>Signal</span>
+            <span style={{flex:"0 0 90px"}}>Value</span>
+            <span style={{flex:"0 0 70px"}}>Status</span>
+            <span style={{flex:"0 0 200px"}}>Broker Values</span>
+            <span style={{flex:1}}>Notes</span>
+          </div>
+          <div style={{maxHeight:500,overflowY:"auto"}}>
+            {result.signals?.map((r,i)=>{const sc=SC[r.status]||SC.Normal;
+              return <div key={i} style={{display:"flex",padding:"10px 16px",borderBottom:"1px solid #f4f5f7",alignItems:"flex-start",background:r.discrepancy?"#fffbf0":"transparent"}}>
+                <div style={{flex:"0 0 110px"}}><div style={{fontFamily:fb,fontSize:12,fontWeight:600}}>{r.id}</div></div>
+                <span style={{flex:"0 0 90px",fontFamily:f,fontSize:13,fontWeight:500}}>{r.value}</span>
+                <span style={{flex:"0 0 70px"}}><span style={{fontFamily:f,fontSize:8,fontWeight:500,color:sc.c,background:sc.bg,padding:"2px 6px",borderRadius:3,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{r.status}</span></span>
+                <div style={{flex:"0 0 200px",display:"flex",flexDirection:"column",gap:2}}>
+                  {r.brokerValues?.map((bv,j)=><div key={j} style={{fontFamily:f,fontSize:9,color:"#878da4"}}>{bv.broker}: <span style={{color:"#1b1f2e",fontWeight:500}}>{bv.value}</span></div>)}
+                </div>
+                <div style={{flex:1}}>
+                  {r.discrepancy&&<div style={{fontFamily:fb,fontSize:10,color:"#b47300",padding:"2px 6px",background:"#fdf6e5",borderRadius:4,border:"1px solid #efd07e",marginBottom:2}}>⚠ {r.discrepancyNote}</div>}
+                  <div style={{fontFamily:fb,fontSize:10,color:"#878da4",fontStyle:"italic"}}>{r.source}</div>
+                </div>
+              </div>;
+            })}
+          </div>
+        </div>
+      </div>}
+    </div>}
+
+    {view==="history"&&<div style={{background:"#fff",border:"1px solid #dcdfe7",borderRadius:12,overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",fontFamily:fb,fontSize:14,fontWeight:700}}>
+        Signal History ({history?.entries?.length||0} entries)
+      </div>
+      {(!history?.entries?.length)&&<div style={{padding:30,textAlign:"center",fontFamily:fb,fontSize:13,color:"#878da4"}}>No reports processed yet. Upload a PB report to get started.</div>}
+      {history?.entries?.map((entry,i)=><div key={i} style={{borderBottom:"1px solid #eaecf2"}}>
+        <div style={{padding:"10px 16px",background:i===0?"#edf1ff":"transparent",display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontFamily:f,fontSize:11,fontWeight:500}}>{formatDate(entry.reportDate)}</span>
+          <span style={{fontFamily:fb,fontSize:11,color:"#878da4"}}>{entry.brokersFound?.join(", ")}</span>
+          <span style={{fontFamily:f,fontSize:10,color:"#878da4"}}>{entry.signals?.length} signals</span>
+          {i===0&&<span style={{fontFamily:f,fontSize:8,color:"#3654b3",background:"#edf1ff",padding:"2px 6px",borderRadius:3}}>LATEST</span>}
+          <span style={{fontFamily:f,fontSize:9,color:"#878da4",marginLeft:"auto"}}>Saved: {formatDate(entry.savedAt)}</span>
+        </div>
+        {i===0&&<div style={{padding:"4px 16px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+          {entry.signals?.map((s,j)=>{const sc=SC[s.status]||SC.Normal;return <div key={j} style={{fontFamily:f,fontSize:9,display:"flex",alignItems:"center",gap:4,padding:"2px 8px",background:"#fafbfc",borderRadius:4,border:"1px solid #eef0f4"}}>
+            <span>{s.id}</span><span style={{fontWeight:500}}>{s.value}</span><span style={{color:sc.c,fontSize:7,fontWeight:500,textTransform:"uppercase"}}>{s.status}</span>
+          </div>;})}
+        </div>}
+      </div>)}
+    </div>}
+
+    <div style={{marginTop:24,fontFamily:fb,fontSize:11,color:"#878da4",lineHeight:1.6}}>
+      <strong style={{color:"#1b1f2e"}}>How it works:</strong> Upload PB reports → Claude extracts signal values → Review & approve → Click "Save to Dashboard" → Values update the main dashboard's signal cards and enable month-over-month comparisons.
+    </div>
+  </div>;
+}
+
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
