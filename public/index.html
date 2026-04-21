@@ -88,13 +88,29 @@ function timeAgo(iso){if(!iso)return"";const m=Math.floor((Date.now()-new Date(i
 const SENT={positive:"#0d9455",negative:"#c92a2a",neutral:"#8c92a8"};
 const TAG_C={Concentration:"#7c3aed",Leverage:"#db2777",Liquidity:"#0891b2",Redemption:"#c24e00",Regulatory:"#c92a2a",Performance:"#0d9455",Talent:"#6366f1",Macro:"#525973"};
 
-function getStatus(sig,live){if(sig.live&&sig.ticker&&live?.indicators){const k=sig.ticker;if(live.indicators[k]?.status)return live.indicators[k].status;}return sig.status;}
-function getValue(sig,live){if(!sig.live||!sig.ticker||!live?.indicators)return sig.value;const d=live.indicators[sig.ticker];if(!d||d.value==null)return sig.value;if(sig.ticker==="SOFR")return d.value+"%";if(sig.ticker==="VIX_TERM")return d.value;return d.value.toLocaleString(undefined,{maximumFractionDigits:2});}
+function getStatus(sig,live,saved){
+  if(sig.live&&sig.ticker&&live?.indicators){const k=sig.ticker;if(live.indicators[k]?.status)return live.indicators[k].status;}
+  // Check saved signals from PB reports
+  if(saved?.latest?.signals){const s=saved.latest.signals.find(x=>x.id===sig.id);if(s?.status)return s.status;}
+  return sig.status;
+}
+function getValue(sig,live,saved){
+  if(sig.live&&sig.ticker&&live?.indicators){const d=live.indicators[sig.ticker];if(d&&d.value!=null){if(sig.ticker==="SOFR")return d.value+"%";if(sig.ticker==="VIX_TERM")return d.value;return d.value.toLocaleString(undefined,{maximumFractionDigits:2});}}
+  // Check saved signals from PB reports
+  if(saved?.latest?.signals){const s=saved.latest.signals.find(x=>x.id===sig.id);if(s?.value)return s.value;}
+  return sig.value;
+}
+// Get previous month status from saved history (for non-live signals)
+function getSavedPrevStatus(sig,saved){
+  if(!saved?.previous?.signals)return null;
+  const s=saved.previous.signals.find(x=>x.id===sig.id);
+  return s?.status||null;
+}
 
-function getAlerts(liveData){
+function getAlerts(liveData,savedSignals){
   const alerts=[];
   Object.entries(SIGNALS).forEach(([domain,area])=>{area.signals.forEach(s=>{
-    const st=getStatus(s,liveData);const val=getValue(s,liveData)||s.value;
+    const st=getStatus(s,liveData,savedSignals);const val=getValue(s,liveData,savedSignals)||s.value;
     if(st!=="Normal")alerts.push({level:st,domain,signal:s.name,value:val,icon:area.icon});
   });});
   alerts.sort((a,b)=>SO.indexOf(b.level)-SO.indexOf(a.level));
@@ -104,8 +120,8 @@ function getAlerts(liveData){
 function Pulse({color,size=5}){return <span style={{position:"relative",display:"inline-block",width:size,height:size}}><span style={{position:"absolute",inset:-2,borderRadius:"50%",background:color,opacity:0.3,animation:"pr 2s ease-out infinite"}}/><span style={{display:"block",width:size,height:size,borderRadius:"50%",background:color}}/></span>;}
 
 /* ── Threat Level ── */
-function ThreatLevel({liveData}){
-  const all=Object.values(SIGNALS).flatMap(a=>a.signals.map(s=>getStatus(s,liveData)));
+function ThreatLevel({liveData,savedSignals}){
+  const all=Object.values(SIGNALS).flatMap(a=>a.signals.map(s=>getStatus(s,liveData,savedSignals)));
   const overall=worst(all);const sc=SC[overall];
   const counts={Critical:0,Elevated:0,Watch:0,Normal:0};all.forEach(s=>{if(counts[s]!==undefined)counts[s]++;});
   return <div style={{background:sc.bg,border:`2px solid ${sc.bd}`,borderRadius:14,padding:"18px 24px",display:"flex",alignItems:"center",gap:20,boxShadow:`0 0 30px ${sc.ring}`}}>
@@ -210,28 +226,28 @@ function LiveCard({question,mainLabel,mainValue,mainChg,mainStatus,subs,percenti
 
 /* ── Domain Card ── */
 function DomainCard({name,icon,signals,liveData}){
-  const statuses=signals.map(s=>getStatus(s,liveData));const w=worst(statuses);const sc=SC[w];const flagged=statuses.filter(s=>s!=="Normal").length;
+  const statuses=signals.map(s=>getStatus(s,liveData,savedSignals));const w=worst(statuses);const sc=SC[w];const flagged=statuses.filter(s=>s!=="Normal").length;
   return <div style={{flex:"1 1 220px",background:"var(--card)",border:`1.5px solid ${flagged>0?sc.bd:"var(--border)"}`,borderRadius:12,padding:"14px 16px",boxShadow:flagged>0?`0 2px 12px ${sc.ring}`:"var(--sh)"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:20}}>{icon}</span><span style={{fontFamily:"var(--fb)",fontSize:14,fontWeight:700}}>{name}</span></div>
       <div style={{fontFamily:"var(--f)",fontSize:10,fontWeight:800,color:sc.c,background:sc.bg,padding:"3px 10px",borderRadius:5,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{w}</div>
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
-      {signals.filter(s=>flagged>0?getStatus(s,liveData)!=="Normal":true).slice(0,3).map(s=>{
-        const st=getStatus(s,liveData);const ssc=SC[st];const val=getValue(s,liveData)||s.value;
+      {signals.filter(s=>flagged>0?getStatus(s,liveData,savedSignals)!=="Normal":true).slice(0,3).map(s=>{
+        const st=getStatus(s,liveData,savedSignals);const ssc=SC[st];const val=getValue(s,liveData,savedSignals)||s.value;
         return <div key={s.id} style={{display:"flex",alignItems:"center",gap:6}}>
           <div style={{width:4,height:4,borderRadius:"50%",background:ssc.dot}}/><span style={{fontFamily:"var(--fb)",fontSize:11,flex:1}}>{s.name}</span><span style={{fontFamily:"var(--f)",fontSize:11,fontWeight:700}}>{val}</span><span style={{fontFamily:"var(--f)",fontSize:8,fontWeight:700,color:ssc.c,minWidth:50,textAlign:"right"}}>{st}</span>
         </div>;
       })}
-      {flagged>0&&signals.filter(s=>getStatus(s,liveData)==="Normal").length>0&&<div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginTop:2}}>+ {signals.filter(s=>getStatus(s,liveData)==="Normal").length} normal</div>}
+      {flagged>0&&signals.filter(s=>getStatus(s,liveData,savedSignals)==="Normal").length>0&&<div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginTop:2}}>+ {signals.filter(s=>getStatus(s,liveData,savedSignals)==="Normal").length} normal</div>}
     </div>
   </div>;
 }
 
 /* ── Alerts ── */
-function TopAlerts({liveData}){
+function TopAlerts({liveData,savedSignals}){
   const [expanded,setExpanded]=React.useState(false);
-  const alerts=getAlerts(liveData);if(!alerts.length)return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,textAlign:"center",boxShadow:"var(--sh)"}}><div style={{fontFamily:"var(--f)",fontSize:10,color:"var(--green)",fontWeight:500}}>ALL CLEAR — No priority alerts</div></div>;
+  const alerts=getAlerts(liveData,savedSignals);if(!alerts.length)return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,padding:20,textAlign:"center",boxShadow:"var(--sh)"}}><div style={{fontFamily:"var(--f)",fontSize:10,color:"var(--green)",fontWeight:500}}>ALL CLEAR — No priority alerts</div></div>;
   const shown=expanded?alerts:alerts.slice(0,5);
   return <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh)"}}>
     <div style={{padding:"10px 16px",background:"#fafbfc",borderBottom:"1px solid #eaecf2",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>🚨</span><span style={{fontFamily:"var(--fb)",fontSize:13,fontWeight:700}}>Priority Alerts</span><span style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginLeft:"auto"}}>{alerts.length} flagged</span></div>
@@ -295,7 +311,8 @@ function ActionNews({articles}){
           <div style={{display:"flex",gap:7,alignItems:"flex-start"}}>
             <div style={{width:4,height:4,borderRadius:"50%",background:sentColor,marginTop:5,flexShrink:0}}/>
             <div><div style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--text)",lineHeight:1.45,fontWeight:500}}>{a.fund&&<span style={{fontWeight:700,color:"var(--accent)"}}>{a.fund} — </span>}{a.title}</div>
-              <div style={{display:"flex",gap:5,marginTop:3,alignItems:"center"}}>{a.riskTag&&<span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:700,color:tagColor,background:tagColor+"10",padding:"1px 4px",borderRadius:2,border:`1px solid ${tagColor}30`}}>{a.riskTag}</span>}<span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>{a.publisher} · {timeAgo(a.publishedAt)}</span></div>
+              {a.insight&&<div style={{fontFamily:"var(--fb)",fontSize:10,color:"var(--accent)",marginTop:2,fontStyle:"italic"}}>→ {a.insight}</div>}
+              <div style={{display:"flex",gap:5,marginTop:3,alignItems:"center"}}>{a.riskTag&&<span style={{fontFamily:"var(--f)",fontSize:7,fontWeight:700,color:tagColor,background:tagColor+"10",padding:"1px 4px",borderRadius:2,border:`1px solid ${tagColor}30`}}>{a.riskTag}</span>}{a.llmTagged&&<span style={{fontFamily:"var(--f)",fontSize:6,color:"var(--accent)",background:"var(--accent-bg)",padding:"1px 3px",borderRadius:2}}>AI</span>}<span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>{a.publisher} · {timeAgo(a.publishedAt)}</span></div>
             </div>
           </div>
         </a>;
@@ -664,10 +681,10 @@ function getPrevMonthStatus(sig, liveData) {
   return null;
 }
 
-function DomainFocus({name,icon,area,liveData,news,onClose}){
+function DomainFocus({name,icon,area,liveData,news,onClose,savedSignals}){
   const [expId,setExpId]=React.useState(null);
   const relatedNews=(news||[]).filter(n=>area.relatedTags?.includes(n.riskTag));
-  const w=worst(area.signals.map(s=>getStatus(s,liveData)));const sc=SC[w]||SC.Unknown;
+  const w=worst(area.signals.map(s=>getStatus(s,liveData,savedSignals)));const sc=SC[w]||SC.Unknown;
   const soIdx={"Normal":0,"Watch":1,"Elevated":2,"Critical":3};
 
   // Compute previous month-end date label (e.g. "31 Mar 2026")
@@ -685,8 +702,8 @@ function DomainFocus({name,icon,area,liveData,news,onClose}){
           <span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:"var(--text-m)",letterSpacing:"0.06em",textTransform:"uppercase"}}>Current Status</span>
           <span style={{fontFamily:"var(--f)",fontSize:8,color:"var(--text-m)"}}>vs {prevMonthLabel}</span>
         </div>
-        {area.signals.map(s=>{const st=getStatus(s,liveData);const ssc=SC[st]||SC.Unknown;const val=getValue(s,liveData)||s.value;const exp=expId===s.id;
-          const prevSt=getPrevMonthStatus(s,liveData);
+        {area.signals.map(s=>{const st=getStatus(s,liveData,savedSignals);const ssc=SC[st]||SC.Unknown;const val=getValue(s,liveData,savedSignals)||s.value;const exp=expId===s.id;
+          const prevSt=getPrevMonthStatus(s,liveData)||getSavedPrevStatus(s,savedSignals);
           const changed=prevSt&&prevSt!==st;
           const worsened=prevSt&&(soIdx[st]||0)>(soIdx[prevSt]||0);
           const improved=prevSt&&(soIdx[st]||0)<(soIdx[prevSt]||0);
@@ -741,9 +758,12 @@ function App(){
   const [loading,setLoading]=React.useState(true);
   const [lastRefresh,setLastRefresh]=React.useState(null);
 
+  const [savedSignals,setSavedSignals]=React.useState(null);
+
   const fetchLive=React.useCallback(async(force)=>{setLoading(true);try{const r=await fetch(force?"/api/live-feed/force":"/api/live-feed");if(r.ok){const d=await r.json();setLiveData(d);setLastRefresh(d.fetchedAt);}}catch{}setLoading(false);},[]);
   const fetchNews=React.useCallback(async()=>{setNewsLoading(true);try{const r=await fetch("/api/news");if(r.ok){const d=await r.json();setNews(d.articles||[]);}}catch{}setNewsLoading(false);},[]);
-  React.useEffect(()=>{fetchLive();fetchNews();},[]);
+  const fetchSavedSignals=React.useCallback(async()=>{try{const r=await fetch("/api/signals/latest");if(r.ok){const d=await r.json();setSavedSignals(d);}}catch{}},[]);
+  React.useEffect(()=>{fetchLive();fetchNews();fetchSavedSignals();},[]);
 
   const ind=liveData?.indicators||{};
   const toggle=(id)=>setExpandedId(expandedId===id?null:id);
@@ -769,19 +789,19 @@ function App(){
     </div>
 
     {/* 1. Threat Level */}
-    <div style={{marginBottom:14}}><ThreatLevel liveData={liveData}/></div>
+    <div style={{marginBottom:14}}><ThreatLevel liveData={liveData} savedSignals={savedSignals}/></div>
 
     {/* 2. DOMAIN CARDS — PRIMARY FOCUS (single row of 4) */}
     <div style={{display:"flex",gap:14,marginBottom:selDomain?0:14}}>
       {Object.entries(SIGNALS).map(([name,area])=>{
-        const isSel=selDomain===name;const sts=area.signals.map(s=>getStatus(s,liveData));const w=worst(sts);const sc=SC[w]||SC.Unknown;const fl=sts.filter(s=>s!=="Normal").length;
+        const isSel=selDomain===name;const sts=area.signals.map(s=>getStatus(s,liveData,savedSignals));const w=worst(sts);const sc=SC[w]||SC.Unknown;const fl=sts.filter(s=>s!=="Normal").length;
         return <div key={name} onClick={()=>setSelDomain(isSel?null:name)} style={{flex:1,background:"var(--card)",border:`${isSel?"2.5px":"1px"} solid ${isSel?sc.dot:fl>0?sc.bd:"var(--border)"}`,borderRadius:14,padding:"20px 22px",cursor:"pointer",transition:"all 0.15s",boxShadow:isSel?`0 4px 20px ${sc.ring}`:fl>0?`0 2px 12px ${sc.ring}`:"var(--sh)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:26}}>{area.icon}</span><span style={{fontFamily:"var(--fb)",fontSize:16,fontWeight:700}}>{name}</span></div>
             <div style={{fontFamily:"var(--f)",fontSize:11,fontWeight:500,color:sc.c,background:sc.bg,padding:"4px 12px",borderRadius:6,border:`1px solid ${sc.bd}`,textTransform:"uppercase"}}>{w}</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:7}}>
-            {area.signals.filter(s=>fl>0?getStatus(s,liveData)!=="Normal":true).slice(0,3).map(s=>{const st=getStatus(s,liveData);const ssc=SC[st];const val=getValue(s,liveData)||s.value;
+            {area.signals.filter(s=>fl>0?getStatus(s,liveData,savedSignals)!=="Normal":true).slice(0,3).map(s=>{const st=getStatus(s,liveData,savedSignals);const ssc=SC[st];const val=getValue(s,liveData,savedSignals)||s.value;
               return <div key={s.id} style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{width:5,height:5,borderRadius:"50%",background:ssc.dot}}/>
                 <span style={{fontFamily:"var(--fb)",fontSize:13,flex:1}}>{s.name}</span>
@@ -789,7 +809,7 @@ function App(){
                 <span style={{fontFamily:"var(--f)",fontSize:9,fontWeight:500,color:ssc.c,minWidth:55,textAlign:"right"}}>{st}</span>
               </div>;
             })}
-            {fl>0&&area.signals.filter(s=>getStatus(s,liveData)==="Normal").length>0&&<div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginTop:2}}>+ {area.signals.filter(s=>getStatus(s,liveData)==="Normal").length} normal</div>}
+            {fl>0&&area.signals.filter(s=>getStatus(s,liveData,savedSignals)==="Normal").length>0&&<div style={{fontFamily:"var(--f)",fontSize:9,color:"var(--text-m)",marginTop:2}}>+ {area.signals.filter(s=>getStatus(s,liveData,savedSignals)==="Normal").length} normal</div>}
           </div>
           <div style={{display:"flex",gap:4,marginTop:14}}>{sts.map((s,i)=><div key={i} style={{width:10,height:10,borderRadius:3,background:s==="Normal"?"var(--surface)":SC[s]?.bg,border:`1.5px solid ${s==="Normal"?"var(--border)":SC[s]?.dot}`}}/>)}</div>
           {isSel&&<div style={{fontFamily:"var(--f)",fontSize:9,color:sc.c,marginTop:8,textAlign:"center",fontWeight:500}}>▼ Detail below</div>}
@@ -798,7 +818,7 @@ function App(){
     </div>
 
     {/* Domain Focus Panel */}
-    {selDomain&&SIGNALS[selDomain]&&<DomainFocus name={selDomain} icon={SIGNALS[selDomain].icon} area={SIGNALS[selDomain]} liveData={liveData} news={news} onClose={()=>setSelDomain(null)}/>}
+    {selDomain&&SIGNALS[selDomain]&&<DomainFocus name={selDomain} icon={SIGNALS[selDomain].icon} area={SIGNALS[selDomain]} liveData={liveData} news={news} onClose={()=>setSelDomain(null)} savedSignals={savedSignals}/>}
 
     {/* 3. INDEX CARDS with custom charts (2x2, equal size) */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridAutoRows:"1fr",gap:12,marginBottom:14,marginTop:selDomain?14:0}}>
@@ -820,7 +840,7 @@ function App(){
 
     {/* 4. Alerts + Themes + News */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
-      <TopAlerts liveData={liveData}/>
+      <TopAlerts liveData={liveData} savedSignals={savedSignals}/>
       <ThemesCompact/>
       <ActionNews articles={news}/>
     </div>
